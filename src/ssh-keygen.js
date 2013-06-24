@@ -4,24 +4,21 @@ var fs = require('fs');
 var os = require('os');
 var path = require('path');
 
-var log = function(a){
-	if(process.env.VERBOSE) console.log('ssh-keygen: '+a);
-}
-function checkAvailability(location, force, callback){
+function checkAvailability(location, force, log, callback){
 	var pubLocation = location+'.pub';
-	log('checking availability: '+location);
+	log.debug('checking availability: '+location);
 	fs.exists(location, function(keyExists){
-		log('checking availability: '+pubLocation);
+		log.debug('checking availability: '+pubLocation);
 		fs.exists(pubLocation, function(pubKeyExists){
 			doForce(keyExists, pubKeyExists);
-		})
+		});
 	});
 	function doForce(keyExists, pubKeyExists){
 		if(!force && keyExists) return callback(location+' already exists');
 		if(!force && pubKeyExists) return callback(pubLocation+' already exists');
 		if(!keyExists && !pubKeyExists) return callback();
 		if(keyExists){ 
-			log('removing '+location);
+			log.debug('removing '+location);
 			fs.unlink(location, function(err){
 				if(err) return callback(err);
 				keyExists = false;
@@ -29,7 +26,7 @@ function checkAvailability(location, force, callback){
 			});
 		}
 		if(pubKeyExists) {
-			log('removing '+pubLocation);
+			log.debug('removing '+pubLocation);
 			fs.unlink(pubLocation, function(err){
 				if(err) return callback(err);
 				pubKeyExists = false;
@@ -39,44 +36,47 @@ function checkAvailability(location, force, callback){
 	}
 }
 function ssh_keygen(location, opts, callback){
-	opts || (opts={});
+	opts = opts || {};
 
 	var pubLocation = location+'.pub';
 	if(!opts.comment) opts.comment = '';
 	if(!opts.password) opts.password = '';
+        if(!opts.quiet) opts.quiet = false;
 
-	var keygen = spawn('ssh-keygen', [
-		'-t','rsa',
-		'-b','2048',
-		'-C', opts.comment,
-		'-N', opts.password,
-		'-f', location
-	]);
+        var args =  [ '-t', 'rsa'
+                    , '-b', '2048'
+                    , '-C', opts.comment
+                    , '-N', opts.password
+                    , '-f', location
+	];
+        if (opts.quiet) args.push('-q');
+
+	var keygen = spawn('ssh-keygen', args);
 
 	keygen.stdout.on('data', function(a){
-		log('stdout:'+a);
+		opts.log.info('stdout:'+a);
 	});
 
 	var read = opts.read;
 	var destroy = opts.destroy;
 
 	keygen.on('exit',function(){
-		log('exited');
+		opts.log.info('exited');
 		if(read){
-			log('reading key '+location);
+			opts.log.debug('reading key '+location);
 			fs.readFile(location, 'utf8', function(err, key){			
 				if(destroy){
-					log('destroying key '+location);
+					opts.log.debug('destroying key '+location);
 					fs.unlink(location, function(err){
 						if(err) return callback(err);
 						readPubKey();
 					});
 				} else readPubKey();
 				function readPubKey(){
-					log('reading pub key '+pubLocation);
+					opts.log.debug('reading pub key '+pubLocation);
 					fs.readFile(pubLocation, 'utf8', function(err, pubKey){
 						if(destroy){
-							log('destroying pub key '+pubLocation);
+							opts.log.debug('destroying pub key '+pubLocation);
 							fs.unlink(pubLocation, function(err){
 								if(err) return callback(err);
 								return callback(undefined, { key: key, pubKey: pubKey });
@@ -89,9 +89,9 @@ function ssh_keygen(location, opts, callback){
 	});
 
 	keygen.stderr.on('data',function(a){
-		log('stderr:'+a);
+		opts.log.error('stderr:'+a);
 	});
-};
+}
 
 module.exports = function(opts, callback){
 	var location = opts.location;
@@ -100,10 +100,29 @@ module.exports = function(opts, callback){
 	if(_.isUndefined(opts.read)) opts.read = true;
 	if(_.isUndefined(opts.force)) opts.force = true;
 	if(_.isUndefined(opts.destroy)) opts.destroy = true;
+	if(_.isUndefined(opts.log)) {
+          if(process.env.VERBOSE) { 
+            opts.log = 
+                  { error   : function(msg, props) { console.log(msg); console.trace(props.exception); }
+                  , warning : function(msg, props) { console.log(msg); if (props) console.log(props);  }
+                  , notice  : function(msg, props) { console.log(msg); if (props) console.log(props);  }
+                  , info    : function(msg, props) { console.log(msg); if (props) console.log(props);  }
+                  , debug   : function(msg, props) { console.log(msg); if (props) console.log(props);  }
+                  };
+          } else {
+            opts.log = 
+                  { error   : function(msg, props) {/* jshint unused: false */}
+                  , warning : function(msg, props) {/* jshint unused: false */}
+                  , notice  : function(msg, props) {/* jshint unused: false */}
+                  , info    : function(msg, props) {/* jshint unused: false */}
+                  , debug   : function(msg, props) {/* jshint unused: false */}
+                  };
+          }
+        }
 
-	checkAvailability(location, opts.force, function(err){
+	checkAvailability(location, opts.force, opts.log, function(err){
 		if(err){
-			log('availability err '+err);
+			opts.log.error('availability err '+err);
 			return callback(err);
 		}
 		ssh_keygen(location, opts, callback);
