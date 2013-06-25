@@ -61,7 +61,7 @@ function ssh_keygen(location, opts, callback){
 	var destroy = opts.destroy;
 
 	keygen.on('exit',function(){
-		opts.log.info('exited');
+		opts.log.debug('exited');
 		if(read){
 			opts.log.debug('reading key '+location);
 			fs.readFile(location, 'utf8', function(err, key){			
