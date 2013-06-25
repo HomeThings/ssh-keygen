@@ -14,7 +14,9 @@ function checkAvailability(location, force, log, callback){
 		});
 	});
 	function doForce(keyExists, pubKeyExists){
-		if(!force && keyExists) return callback(location+' already exists');
+		if(!force && keyExists) {
+     
+return callback(location+' already exists');
 		if(!force && pubKeyExists) return callback(pubLocation+' already exists');
 		if(!keyExists && !pubKeyExists) return callback();
 		if(keyExists){ 
@@ -123,7 +125,7 @@ module.exports = function(opts, callback){
 	checkAvailability(location, opts.force, opts.log, function(err){
 		if(err){
 			opts.log.error('availability err '+err);
-			return callback(new Error(err));
+			return callback(err);
 		}
 		ssh_keygen(location, opts, callback);
 	});
